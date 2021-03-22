@@ -3,7 +3,7 @@ import numpy as np
 from math import exp
 from matplotlib import pyplot as plt
 
-from event_finding import get_first_trough_index, find_transitions
+from event_finding import get_first_trough_index, find_transitions, top_finder
 from util import extract_estimates, load_estimates
 
 
@@ -48,10 +48,13 @@ class Curve:
         """
         if DEBUG:
             print(self.identifier)
+        # self.top = (top_finder(self.force_data, window_size=100),
+        #             len(self.force_data) - top_finder(self.force_data[::-1],
+        #                                               window_size=100))
         self.top = (get_first_trough_index(self.force_data, debug=DEBUG),
                     get_first_trough_index(self.force_data, last=True,
                                            debug=DEBUG))
-        if self.top[1] - self.top[0] > 100:
+        if self.top[1] - self.top[0] > 100 and False:
             self.unfolds, self.threshold = \
                 find_transitions(self.force_data,
                                  noise_estimation_window=self.top)
@@ -208,7 +211,7 @@ class Curve:
         self.fits[0][self.handles_model].plot()
         for fit in self.fits:
             fit[self.composite_model].plot()
-        plt.yscale('log')
+        #plt.yscale('log')
         return fig
 
     def compute_unfold_forces(self, handles_model: lk.fitting.model.Model,

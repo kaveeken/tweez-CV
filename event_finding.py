@@ -16,6 +16,31 @@ def moving_window_SLR(f, window_size=100):
     return models
 
 
+def top_finder(f, window_size=100):
+    models = moving_window_SLR(f, window_size=window_size)
+    slopes = np.asarray([model['slope'] for model in models])
+    ignore_from = (len(slopes) // 5) * 4
+    peak = np.argmax(slopes[:ignore_from])
+    threshold = max(slopes) / 5
+    dips = []
+    in_dip = False
+    current_dip = 0
+    for index, slope in enumerate(slopes[peak:ignore_from]):
+        if not in_dip:
+            if slope < threshold:
+                in_dip = True
+                dips.append([index + peak])
+        else:
+            if slope >= threshold:
+                in_dip = False
+                current_dip = 0
+            else:
+                dips[current_dip].append(index + peak)
+    return int(dips[np.argmax([len(dip) for dip in dips])][0] * 100 - window_size / 2)
+
+#def top_finder_2(f,
+
+
 def get_first_trough_index(f, last=False, debug=False):
     """ Tries to find stationary/return point of trace including pulling and 
     relaxation. Looks at standard deviation of a running mean and signals at

@@ -61,3 +61,15 @@ def thresholding_algo(y, lag, threshold, influence):
     return dict(signals=np.asarray(signals),
                 avgFilter=np.asarray(avgFilter),
                 stdFilter=np.asarray(stdFilter))
+
+
+def print_summary(fdcurves):
+    largest_id_len = max([len(id) for id in fdcurves.keys()])
+    row_format = f'{{:<{largest_id_len + 1}}}| {{:<5}}| {{:<9}}| {{:<9}}| {{:<9}}| {{}}'
+    
+    print(row_format.format('Curve', 'fold', 'Lc (um)', 'Lp (nm)', 'Fu (pN)',
+                            'failed tests'))
+    print(row_format.format('-' * largest_id_len, '----', '--------', '--------', '--------', '------------'))
+    
+    for curve_id, curve in fdcurves.items():
+        curve.print_result_rows(row_format)

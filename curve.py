@@ -10,6 +10,9 @@ from util import extract_estimates, load_estimates
 class Curve:
     """ This class holds the data of an FD curve and methods used for analysis.
     Many methods rely on internal state change and can only be ran sequentially.
+    
+    Now takes separate pull and relax data because it's easier to handle.
+    Rest of class still needs some adapting.
     """
     def __init__(self, identifier: str, ddata: np.ndarray, fdata: np.ndarray,
                  pull_d=np.empty([]), pull_f=np.empty([]),
@@ -30,13 +33,20 @@ class Curve:
                 self.rlx_f = rlx_f
                 self.rlx_d = rlx_d
 
-    def filter_bead_loss(self):
+    def filter_bead_loss(self, handle_contour=False):
         """ Test for a sudden drop in force to 0. Implementation is somewhat
         arbitrary. Returns True if a sudden drop is detected and False
         otherwise.
+        
+
         """
+        if handle_contour:
+            start = np.argwhere(self.dist_data > handle_contour)[0][0]
+            floor = np.min(self.force_data[start:start+100])
+        else:
+            floor = 10 # arbitrary and feels bad same as 40 below
         for index, force in enumerate(self.force_data[1:]):
-            if force <= 0.01 and self.force_data[index] > 1:
+            if force <= floor and self.force_data[index] > 40:
                 return True
         return False
 
@@ -63,7 +73,7 @@ class Curve:
         # self.top = (top_finder(self.force_data, window_size=100),
         #             len(self.force_data) - top_finder(self.force_data[::-1],
         #                                               window_size=100))
-        if not self.split:
+        if not self.split:  # old part
             self.top = (get_first_trough_index(self.force_data, debug=DEBUG),
                         get_first_trough_index(self.force_data, last=True,
                                                debug=DEBUG))
@@ -98,7 +108,7 @@ class Curve:
                 self.start = np.argwhere(self.pull_d > handle_contour)[0][0]
             else:
                 self.start = np.argwhere(self.pull_f > STARTING_FORCE)[0][0]
-            # pull_f should just be turned into pull_f[start:]?
+            # pull_f should be turned into pull_f[start:]?
             self.unfolds, self.threshold = \
                 find_transitions(self.pull_f[self.start:])
             self.unfolds = np.asarray([unfold + self.start for unfold in self.unfolds])
@@ -242,7 +252,7 @@ class Curve:
         self.fits[0][self.handles_model].plot()
         for fit in self.fits:
             fit[self.composite_model].plot()
-        #plt.yscale('log')
+        plt.yscale('log')
         return fig
 
     def compute_unfold_forces(self, handles_model: lk.fitting.model.Model,

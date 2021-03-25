@@ -11,12 +11,24 @@ class Curve:
     """ This class holds the data of an FD curve and methods used for analysis.
     Many methods rely on internal state change and can only be ran sequentially.
     """
-    def __init__(self, identifier: str, ddata: np.ndarray, fdata: np.ndarray):
+    def __init__(self, identifier: str, ddata: np.ndarray, fdata: np.ndarray,
+                 pull_d=np.empty([]), pull_f=np.empty([]),
+                 rlx_d=np.empty([]), rlx_f=np.empty([])):
         """ Take the identifier, distance data and force data for an fd curve.
         """
         self.identifier = identifier
         self.dist_data = ddata
         self.force_data = fdata
+
+        self.split = 0
+        if pull_f.any() and pull_d.any():
+            self.split += 1
+            self.pull_f = pull_f
+            self.pull_d = pull_d
+            if rlx_f.any() and rlx_d.any():
+                self.split += 1
+                self.rlx_f = rlx_f
+                self.rlx_d = rlx_d
 
     def filter_bead_loss(self):
         """ Test for a sudden drop in force to 0. Implementation is somewhat
@@ -30,7 +42,7 @@ class Curve:
 
     def find_events(self, STARTING_FORCE: float = 0, CORDON: int = 10,
                     FIT_ON_RETURN: tuple = (), DEBUG: bool = False,
-                    LONGEST=1e6):
+                    LONGEST=1e6, handle_contour=False):
         """ Identifies relevant events in the force data over time. From those
         events determines which parts (legs) of the data to mark for fitting.
 
@@ -51,34 +63,52 @@ class Curve:
         # self.top = (top_finder(self.force_data, window_size=100),
         #             len(self.force_data) - top_finder(self.force_data[::-1],
         #                                               window_size=100))
-        self.top = (get_first_trough_index(self.force_data, debug=DEBUG),
-                    get_first_trough_index(self.force_data, last=True,
-                                           debug=DEBUG))
-        if self.top[1] - self.top[0] > 100 and False:
-            self.unfolds, self.threshold = \
-                find_transitions(self.force_data,
-                                 noise_estimation_window=self.top)
+        if not self.split:
+            self.top = (get_first_trough_index(self.force_data, debug=DEBUG),
+                        get_first_trough_index(self.force_data, last=True,
+                                               debug=DEBUG))
+            if self.top[1] - self.top[0] > 100 and False:
+                self.unfolds, self.threshold = \
+                    find_transitions(self.force_data,
+                                     noise_estimation_window=self.top)
+            else:
+                self.unfolds, self.threshold = find_transitions(self.force_data)
+
+                self.start = 0
+                for index, force in enumerate(self.force_data):
+                    if force > STARTING_FORCE:
+                        self.start = index
+                        break
+                    halfway = int(len(self.force_data) / 2)
+                    force_min = np.argmin(self.force_data[:halfway])
+                    self.start = force_min
+
+                    events = [self.start, *self.unfolds, self.top[0]]
+                    self.legs = [slice(*[events[i] + CORDON,
+                                         min(events[i+1] - CORDON,
+                                             events[i] + CORDON + LONGEST)])
+                                 for i in range(len(events) - 1)]
+
+                    if FIT_ON_RETURN:
+                        self.legs.append(slice(self.top_window[-1] + FIT_ON_RETURN[0],
+                                               self.top_window[-1] + sum(FIT_ON_RETURN)))
         else:
-            self.unfolds, self.threshold = find_transitions(self.force_data)
+            self.start = 0
+            if handle_contour:
+                self.start = np.argwhere(self.pull_d > handle_contour)[0][0]
+            else:
+                self.start = np.argwhere(self.pull_f > STARTING_FORCE)[0][0]
+            # pull_f should just be turned into pull_f[start:]?
+            self.unfolds, self.threshold = \
+                find_transitions(self.pull_f[self.start:])
+            self.unfolds = np.asarray([unfold + self.start for unfold in self.unfolds])
+            events = [self.start, *self.unfolds, len(self.pull_f)]
+            self.legs = [slice(*[events[i] + CORDON,
+                                 min(events[i+1] - CORDON,
+                                     events[i] + CORDON + LONGEST)])
+                         for i in range(len(events) - 1)]
 
-        self.start = 0
-        for index, force in enumerate(self.force_data):
-            if force > STARTING_FORCE:
-                self.start = index
-                break
-        halfway = int(len(self.force_data) / 2)
-        force_min = np.argmin(self.force_data[:halfway])
-        self.start = force_min
 
-        events = [self.start, *self.unfolds, self.top[0]]
-        self.legs = [slice(*[events[i] + CORDON,
-                             min(events[i+1] - CORDON,
-                                 events[i] + CORDON + LONGEST)])
-                     for i in range(len(events) - 1)]
-
-        if FIT_ON_RETURN:
-            self.legs.append(slice(self.top_window[-1] + FIT_ON_RETURN[0],
-                                   self.top_window[-1] + sum(FIT_ON_RETURN)))
 
     def plot_events(self):
         fig = plt.figure()
@@ -91,8 +121,9 @@ class Curve:
             plt.plot(np.arange(N)[leg],  # np.arange(leg) ?
                      self.force_data[leg],
                      c='tab:green')
-        plt.plot(np.arange(self.top[0], self.top[1]),
-                 self.force_data[self.top[0]:self.top[1]], c='tab:red')
+        if not self.split:
+            plt.plot(np.arange(self.top[0], self.top[1]),
+                    self.force_data[self.top[0]:self.top[1]], c='tab:red')
         plt.title(self.identifier)
         return fig
 

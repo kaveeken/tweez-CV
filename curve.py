@@ -12,7 +12,7 @@ class Curve:
     Many methods rely on internal state change and can only be ran sequentially.
     
     Now takes separate pull and relax data because it's easier to handle.
-    Rest of class still needs some adapting.
+    Rest of class still needs to adapt.
     """
     def __init__(self, identifier: str, ddata: np.ndarray, fdata: np.ndarray,
                  pull_d=np.empty([]), pull_f=np.empty([]),
@@ -42,11 +42,11 @@ class Curve:
         """
         if handle_contour:
             start = np.argwhere(self.dist_data > handle_contour)[0][0]
-            floor = np.min(self.force_data[start:start+100])
+            floor = np.max(self.force_data[start:start+100])
         else:
             floor = 10 # arbitrary and feels bad same as 40 below
         for index, force in enumerate(self.force_data[1:]):
-            if force <= floor and self.force_data[index] > 40:
+            if force <= floor and self.force_data[index] > 20:
                 return True
         return False
 
@@ -272,6 +272,9 @@ class Curve:
             self.unfold_forces.append(composite_model(dist, fit))
         if VERBOSE:
             print(self.identifier, '\n', self.unfold_forces)
+
+    def avg_bic(self):
+        return np.mean([fit.bic for fit in self.fits])
 
     def print_result_rows(self, row_format: str):
         """ Print a row containing contour length, persistence length and

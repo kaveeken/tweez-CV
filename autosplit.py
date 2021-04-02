@@ -4,16 +4,40 @@ import h5py
 from scipy.stats import hmean
 
 
+def find_signal_start(signal):
+    SIG_CUTOFF = 2
+    first = np.argwhere(np.asarray(signal) < SIG_CUTOFF)[0][0]
+    top = np.max(signal[first:])
+    new_first = np.argwhere(np.asarray(signal) <= top)[0][0]
+    #return signal[new_first:]
+    return new_first
+
+
+def find_first_landing(signal):
+    BINS = 100
+    edge = np.histogram(signal, bins=BINS)[1][1]
+    first = np.argwhere(np.asarray(signal) < edge)[0][0]
+    return first
+    
+
+def baseline(force, distance, region, degree=4):
+    x = distance[region]
+    y = force[region]
+    P = np.poly1d(np.polyfit(x,y,degree))
+    new_force = force - P(distance) 
+
+    return new_force
+    
+
 def find_pulls(signal, bins=100, stepsize=1000, verbose=False):
-    bars = plt.hist(signal[::stepsize], bins=bins)
-    highest = np.argmax(bars[0])
-    second = np.argmax([heigth for index, heigth in enumerate(bars[0])
+    hist, edges = np.histogram(signal[::stepsize], bins=bins)
+    highest = np.argmax(hist)
+    second = np.argmax([heigth for index, heigth in enumerate(hist)
                         if index != highest])
 
-    low_signal = bars[1][min(highest, second) + 1]
-    high_signal = bars[1][max(highest, second)]
+    low_signal = edges[min(highest, second) + 1]
+    high_signal = edges[max(highest, second)]
 
-    print(bars[1])
     pulling = True
     relaxing = True
     pulls = []
@@ -34,19 +58,21 @@ def find_pulls(signal, bins=100, stepsize=1000, verbose=False):
             pulling = False
             relaxing = False
             pulls.append((start, index * stepsize))
-
     return pulls
+
 
 
 def autosplit(fname):
     """a mess"""
     d = h5py.File(fname, 'r')
     signal = d['Trap position']['1X']
-    first = np.argwhere(np.asarray(signal) < 2)[0][0]
-    signal = signal[first:]  # get rid of initial descent
-    distance = d['Distance']['Piezo Distance'][first:]
+    start = find_signal_start(signal)
+    signal = signal[start:]
+    first_land = find_first_landing(signal)
+    distance = d['Distance']['Piezo Distance'][start:]
     distance = distance - np.amin(distance)
-    force = d['Force HF']['Force 1x'][first:]
+    force_raw = d['Force HF']['Force 1x'][start:]
+    force = baseline(force_raw, distance, slice(0, first_land))
 
     toseconds = 1e-9
     duration = (d['Force LF']['Force 1x'][:][-1][0]
@@ -94,10 +120,10 @@ def autosplit(fname):
             continue
 
         curves[identifier] = \
-            {'pull_force': smooth_force[start:pull_stop][::kernel_size],
-             'pull_dist': distance[start:pull_stop][::kernel_size],
-             'rlx_force': smooth_force[relax_start:stop][::kernel_size],
-             'rlx_dist': distance[relax_start:stop][::kernel_size],
+            {'pull_force': smooth_force[start:pull_stop][::kernel_size][:-10],
+             'pull_dist': distance[start:pull_stop][::kernel_size][:-10],
+             'rlx_force': smooth_force[relax_start:stop][::kernel_size][10:],
+             'rlx_dist': distance[relax_start:stop][::kernel_size][10:],
              'full_force': smooth_force[start:stop][::kernel_size],
              'full_dist': distance[start:stop][::kernel_size],
              'sign': signal[start:stop][::kernel_size],

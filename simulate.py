@@ -13,6 +13,7 @@ def gen_comp():
                              independent_min = 0,
                             independent_max = 90) + lk.force_offset('handles')
 
+# change! proper distance data (jumps @ unfold), specify unfold forces instead of first unfold dsit
 def generate_fd(first_unf, cls, handle_estimates_orig, protein_estimates_orig,
                 stds={'dist': 0.00195, 'force': 0.105}):
     model_h = gen_hm()

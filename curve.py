@@ -207,6 +207,7 @@ class Curve:
         self.fits[0]['handles/St'].fixed = True
         self.fits[0]['handles/Lp'].fixed = True
         self.fits[0]['handles/Lc'].fixed = True
+        self.fits[0]['handles/f_offset'].fixed = True
 
         for fit in self.fits[1:]:
             load_estimates(fit, extract_estimates(self.fits[0]))
@@ -252,7 +253,7 @@ class Curve:
         self.fits[0][self.handles_model].plot()
         for fit in self.fits:
             fit[self.composite_model].plot()
-        plt.yscale('log')
+        #plt.yscale('log')
         return fig
 
     def compute_unfold_forces(self, handles_model: lk.fitting.model.Model,

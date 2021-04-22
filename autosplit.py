@@ -1,7 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import h5py
-from scipy.stats import hmean
+from scipy.stats import hmean, pearsonr
+from copy import deepcopy
 
 
 def find_pulls(signal, bins=100, stepsize=1000, verbose=False):
@@ -38,31 +39,139 @@ def find_pulls(signal, bins=100, stepsize=1000, verbose=False):
     return pulls
 
 
+def smooth(x, kernel_size=1000):
+    kernel = np.ones(kernel_size) / kernel_size
+    return np.convolve(x, kernel, mode='same')
+
+
+def baseline(d, f, pulling_start, degree=8):
+    poly = np.polyfit(d[:pulling_start],f[:pulling_start],degree)
+    P = np.poly1d(poly)
+    return f - P(d)
+
+
+def pearsonerer(x, y):
+    return lambda slc: pearsonr(x[slc], y[slc])[0]
+
+
+def clip_data_dict(data_dict, head=0, tail=False, downsample=1):
+    new_dict = {}
+    for key, vector in data_dict.items():
+        if not tail:
+            new_dict[key] = vector[head::downsample]
+        else:
+            new_dict[key] = vector[head:tail:downsample]
+    return new_dict
+
+
+def find_ditch(f1, f2, box_size=100):
+    sf1 = smooth(f1)
+    sf2 = smooth(f2)
+    pearsoner = pearsonerer(sf1,sf2)
+    # def pearsoner(slc):
+    #     if not slc.start % 10000:
+    #         print(slc.start)
+    #     return pearsonr(sf1[slc],sf2[slc])[0]
+    # slices = [slice(i, i + box_size)
+              # for i in range(len(sf1) - box_size)]
+    downsample = 10
+    #questionmark = 
+    slices = [slice(i * downsample, i * downsample + box_size)
+              for i in range(len(sf1) // downsample - box_size // downsample)]
+    print(len(sf1))
+    print('slc', len(slices))
+    pearsons = np.asarray(list(map(pearsoner, slices)))
+    smearsons = smooth(pearsons)
+                   # abs?
+    ditchpoint = np.argmax(np.diff(smearsons[::6000 // downsample])) \
+        * 6000  # very sketchy
+    plt.figure()
+    plt.plot(smearsons)
+    plt.figure()
+    plt.title('smearsons')
+    plt.plot(np.diff(smearsons[::6000 // downsample]))
+    plt.figure()
+    plt.plot(sf1)
+    plt.plot(sf2)
+    plt.ylim((min(sf1),max(sf2)))
+    plt.axvline(ditchpoint)
+    return ditchpoint
+    
+
+def clean_data(data_full, signal_threshold=2):
+    end_garbage = np.argwhere(data_full['distance'] > signal_threshold)[0][0]
+    data_clean = clip_data_dict(data_full, head=end_garbage)
+    end_descent = np.argwhere(data_clean['signal'] < signal_threshold)[0][0]
+    data_clipped = clip_data_dict(data_clean, head=end_descent)
+    print(end_garbage, end_descent)
+    print('len', len(data_clean['force']))
+    return data_clean, data_clipped, end_descent
+    
+
+def calibrate_data(data_clean, descent_end, pulling_start):
+    based_force_full = baseline(data_clean['distance'], data_clean['force'],
+                                pulling_start)
+    based_force_2_full = baseline(data_clean['distance'], data_clean['force_2'],
+                                  pulling_start)
+
+    ditch_index = find_ditch(based_force_full[descent_end:pulling_start],
+                             based_force_2_full[descent_end:pulling_start]) \
+                             + descent_end
+    ditched_distance = data_clean['distance'][ditch_index]
+    data_cal = data_clean
+    data_cal['force'] = based_force_full
+    data_cal['force_2'] = based_force_2_full
+    data_cal['distance'] -= ditched_distance
+    print('ditch:',ditch_index,ditched_distance)
+    return data_cal
+
+
 def autosplit(fname):
     """a mess"""
+    # import data
     d = h5py.File(fname, 'r')
-    signal = d['Trap position']['1X']
-    first = np.argwhere(np.asarray(signal) < 2)[0][0]
-    signal = signal[first:]  # get rid of initial descent
-    distance = d['Distance']['Piezo Distance'][first:]
-    distance = distance - np.amin(distance)
-    force = d['Force HF']['Force 1x'][first:]
-
-    toseconds = 1e-9
+    data_full = {
+        'signal': np.asarray(d['Trap position']['1X']),
+        'distance': np.asarray(d['Distance']['Piezo Distance']),
+        'force': np.asarray(d['Force HF']['Force 1x']),
+        'force_2': np.asarray(d['Force HF']['Force 2x'])
+    }
+    toseconds = 1e-9  # from ns
     duration = (d['Force LF']['Force 1x'][:][-1][0]
                 - d['Force LF']['Force 1x'][:][0][0]) * toseconds
-    frequency = len(force) / duration
+    frequency = len(data_full['force']) / duration
     d.close()
 
-    pulls = find_pulls(signal)
+    plt.figure()
+    plt.plot(data_full['signal'])
+    plt.plot(data_full['distance'])
+    plt.figure()
 
+    # clean up data
+    data_clean, data_clipped, end_descent = clean_data(data_full)
+
+    pulls = find_pulls(data_clipped['signal'])
     target = 6000  # target amount of datapoints per curve
     pullens = [pull[1] - pull[0] for pull in pulls]
     pull_points = int(hmean(pullens))  # mean of datapoints per curve. hmean to be close to mode
-    kernel_size = pull_points // target
-    kernel = np.ones(kernel_size) / kernel_size
-    smooth_force = np.convolve(force, kernel, mode='same')  # magic?
 
+    print('ppp:',pull_points)
+    print(len(pulls))
+
+    correction = pull_points // 20
+    pulling_start = pulls[0][0] + end_descent - correction
+
+    data_cal = calibrate_data(data_clean, end_descent, pulling_start)
+    kernel_size = pull_points // target
+    data_cal['force'] = smooth(data_cal['force'],
+                               kernel_size = kernel_size)
+
+    data_fin = clip_data_dict(data_cal, head=end_descent)
+
+    # bad:
+    signal = data_fin['signal']
+    distance = data_fin['distance']
+    smooth_force = data_fin['force']
     curves = {}
     for index, pull in enumerate(pulls):
         downsample = 10000

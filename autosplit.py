@@ -99,7 +99,12 @@ def find_ditch(f1, f2, box_size=100):
     
 
 def clean_data(data_full, signal_threshold=2):
-    end_garbage = np.argwhere(data_full['distance'] > signal_threshold)[0][0]
+    garbage_where = np.argwhere(data_full['distance'] > signal_threshold)
+    print(garbage_where)
+    if not garbage_where.size:
+        end_garbage = 0
+    else:
+        end_garbage = garbage_where[0][0]
     data_clean = clip_data_dict(data_full, head=end_garbage)
     end_descent = np.argwhere(data_clean['signal'] < signal_threshold)[0][0]
     data_clipped = clip_data_dict(data_clean, head=end_descent)
@@ -136,10 +141,10 @@ def autosplit(fname):
         'force': np.asarray(d['Force HF']['Force 1x']),
         'force_2': np.asarray(d['Force HF']['Force 2x'])
     }
-    toseconds = 1e-9  # from ns
-    duration = (d['Force LF']['Force 1x'][:][-1][0]
-                - d['Force LF']['Force 1x'][:][0][0]) * toseconds
-    frequency = len(data_full['force']) / duration
+    # toseconds = 1e-9  # from ns
+    # duration = (d['Force LF']['Force 1x'][:][-1][0]
+    #             - d['Force LF']['Force 1x'][:][0][0]) * toseconds
+    # frequency = len(data_full['force']) / duration
     d.close()
 
     plt.figure()
@@ -178,9 +183,9 @@ def autosplit(fname):
         region = signal[pull[0]:pull[1]][::downsample]
         bars = plt.hist(region, bins=50)  # [0]: counts, [1]: bin lower limits
         first_top = last_top = 0
-        time = 0
-        if index:  # milliseconds
-            time = int((pull[0] - pulls[index - 1][1]) / frequency * 1000)
+        # time = 0
+        #if index:  # milliseconds
+            # time = int((pull[0] - pulls[index - 1][1]) / frequency * 1000)
         for jndex, sig in enumerate(region):
             if not first_top and sig > bars[1][-2]:
                 first_top = pull[0] + jndex * downsample
@@ -191,7 +196,7 @@ def autosplit(fname):
         length = pull[1] - pull[0]
         pull_stop = first_top
         relax_start = last_top
-        rest = time
+        # rest = time
 
         padding = len(str(len(pulls)))
         identifier = 'curve_' + str(index + 1).zfill(padding)
@@ -209,8 +214,8 @@ def autosplit(fname):
              'rlx_dist': distance[relax_start:stop][::kernel_size],
              'full_force': smooth_force[start:stop][::kernel_size],
              'full_dist': distance[start:stop][::kernel_size],
-             'sign': signal[start:stop][::kernel_size],
-             'rest': rest}
+             'sign': signal[start:stop][::kernel_size]}
+             #'rest': rest}
     return curves
 
 # print('somethihng')

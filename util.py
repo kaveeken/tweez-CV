@@ -2,6 +2,13 @@ import numpy as np
 
 
 def load_estimates(fit, est):
+    """ Load a dictionary of estimates into a pylake FdFit object.
+
+    # Arguments:
+    - fit: pylake FdFit object
+    - est: nested dictionary that holds 'value', 'upper_bound', 'lower_bound'
+    and 'fixed' key-value pairs for each parameter name
+    """
     for param_key, param in est.items():
         for field_key in param.keys():
             if field_key == 'value':
@@ -15,6 +22,11 @@ def load_estimates(fit, est):
 
 
 def extract_estimates(fit):
+    """ Pull parameter estimates from a pylake FdFit object and return them
+    in a nested dictionary.
+    # Arguments:
+    - fit: pylake FdFit object
+    """
     est = {}
     for key in fit.params.keys:
         est[key] = {"value": fit.params[key].value,
@@ -64,6 +76,11 @@ def thresholding_algo(y, lag, threshold, influence):
 
 
 def print_summary(fdcurves):
+    """ Takes a dictionary of `Curve` objects and prints a table of analysis 
+    results.
+    # Arguments:
+    - fdcurves: dictionary of `Curve` objects that has gone through analysis
+    """
     largest_id_len = max([len(id) for id in fdcurves.keys()])
     row_format = f'{{:<{largest_id_len + 1}}}| {{:<5}}| {{:<9}}| {{:<9}}| {{:<9}}| {{}}'
     

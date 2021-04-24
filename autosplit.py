@@ -6,7 +6,20 @@ from copy import deepcopy
 
 
 def find_pulls(signal, bins=100, stepsize=1000, verbose=False):
-    bars = plt.hist(signal[::stepsize], bins=bins)
+    """ From a trap position timeseries `signal` identify discrete
+    pulls, and return a list of tuples describing the start and end indices of
+    each identified pull.
+
+    # Arguments:
+    - signal: trap position timeseries array
+    - bins: number of bins used in itentifying top and bottom of pulling curves
+    - stepsize: degree of downsampling. mostly about performance
+    - verbose: whether to track progress by printing every once in a while
+    """
+    # find the tops and bottoms of pulling curves by binning our signal data
+    # this approach may not work with data that includes differently shaped pulls
+    # we assume that the peaks and throughs of pulls are consistent and are the most visited states
+    bars = plt.hist(signal[::stepsize], bins=bins)  # doesn't nupy have a binning fn?
     highest = np.argmax(bars[0])
     second = np.argmax([heigth for index, heigth in enumerate(bars[0])
                         if index != highest])
@@ -21,7 +34,7 @@ def find_pulls(signal, bins=100, stepsize=1000, verbose=False):
     for index, position in enumerate(signal[::stepsize]):
         if not index % 100 and verbose:
             print(index * stepsize)
-        if pulling and relaxing:  # ignore first partial pull
+        if pulling and relaxing:  # ignore first partial pull. assumed: signal starts high and involves an initial approach
             if position < low_signal:
                 pulling = False
                 relaxing = False
@@ -34,27 +47,62 @@ def find_pulls(signal, bins=100, stepsize=1000, verbose=False):
         elif relaxing and position < low_signal:
             pulling = False
             relaxing = False
-            pulls.append((start, index * stepsize))
+            pulls.append((start, index * stepsize))  # slice preferable over tuple
 
     return pulls
 
 
 def smooth(x, kernel_size=1000):
+    """ Smooth a vector `x` using numpy magic I don't fully understand.
+
+    # Arguments:
+    - x: vector to be smoothed
+    - kernel_size: degree with which to smooth vector `x` (number of points to average)
+    """
     kernel = np.ones(kernel_size) / kernel_size
     return np.convolve(x, kernel, mode='same')
 
 
 def baseline(d, f, pulling_start, degree=8):
-    poly = np.polyfit(d[:pulling_start],f[:pulling_start],degree)
+    """ Account for bead-bead interactions in force data `f`. In the initial
+    approach of two beads (data before `pulling_start` index), fit a polynomial
+    funtion to the force:distance relationship, and use that funciton to
+    remove bead-bead effects from the `f` data.
+    
+    # Arguments:
+    - d: distance timeseries data
+    - f: force timeseries data
+    - pulling_start: index of the timeseries data where pulling starts and
+    the initial approach has ended.
+    - degree: degree of the polynomial to be fitted.
+    """
+    poly = np.polyfit(d[:pulling_start], f[:pulling_start], degree)
     P = np.poly1d(poly)
     return f - P(d)
 
 
 def pearsonerer(x, y):
+    """ Build a function that takes a slice object and computes pearon
+    correlation between timeseries data `x` and `y` at that slice.
+
+    # Arguments:
+    - x: first timeseries
+    - y: second timeseries
+    """
+    # idk if this is proper use of lambda
     return lambda slc: pearsonr(x[slc], y[slc])[0]
 
 
 def clip_data_dict(data_dict, head=0, tail=False, downsample=1):
+    """ Take a dictionary containing values of timeseries data (all of the same
+    length), and return a new dictionary with subsets of those timeseries.
+
+    # Arguments:
+    - data_dict: dictionary containing same-length vectors of data
+    - head: number of elements to remove from the start of each vector
+    - tail: last element to keep from each vector
+    - downsample: degree with with to downsample the data
+    """
     new_dict = {}
     for key, vector in data_dict.items():
         if not tail:
@@ -65,40 +113,48 @@ def clip_data_dict(data_dict, head=0, tail=False, downsample=1):
 
 
 def find_ditch(f1, f2, box_size=100):
+    """ Find the point at which two beads touch by looking for large changes
+    in local Pearson correlation.
+
+    # Arguments:
+    - f1: force timeseries for bead 1
+    - f2: force timeseries for bead 2
+    - box_size: size of regions to compute local Pearson correlation
+    """
     sf1 = smooth(f1)
     sf2 = smooth(f2)
-    pearsoner = pearsonerer(sf1,sf2)
-    # def pearsoner(slc):
-    #     if not slc.start % 10000:
-    #         print(slc.start)
-    #     return pearsonr(sf1[slc],sf2[slc])[0]
-    # slices = [slice(i, i + box_size)
-              # for i in range(len(sf1) - box_size)]
+    pearsoner = pearsonerer(sf1, sf2)
     downsample = 10
-    #questionmark = 
     slices = [slice(i * downsample, i * downsample + box_size)
               for i in range(len(sf1) // downsample - box_size // downsample)]
-    print(len(sf1))
-    print('slc', len(slices))
     pearsons = np.asarray(list(map(pearsoner, slices)))
-    smearsons = smooth(pearsons)
-                   # abs?
+    smearsons = smooth(pearsons)  # abs?
     ditchpoint = np.argmax(np.diff(smearsons[::6000 // downsample])) \
         * 6000  # very sketchy
-    plt.figure()
-    plt.plot(smearsons)
-    plt.figure()
-    plt.title('smearsons')
-    plt.plot(np.diff(smearsons[::6000 // downsample]))
-    plt.figure()
-    plt.plot(sf1)
-    plt.plot(sf2)
-    plt.ylim((min(sf1),max(sf2)))
-    plt.axvline(ditchpoint)
+    # plt.figure()
+    # plt.plot(smearsons)
+    # plt.title('smearsons')
+    # plt.figure()
+    # plt.plot(np.diff(smearsons[::6000 // downsample]))
+    # plt.figure()
+    # plt.plot(sf1)
+    # plt.plot(sf2)
+    # plt.ylim((min(sf1),max(sf2)))
+    # plt.axvline(ditchpoint)
     return ditchpoint
-    
+
 
 def clean_data(data_full, signal_threshold=2):
+    """ Remove part of the beginning of a dictionary of timeseries data,
+    to where only (part of) the initial approach of beads remains. Returns two
+    dictionaries: one with and one without the initial approach, as well as an
+    index of where the initial approach ends.
+
+    # Arguments:
+    - data_full: dictionary of timeseries OT data (force, distance, signal)
+    - signal_threshold: the threshold in the signal data we determine as close
+    enough to start working with the data.
+    """
     garbage_where = np.argwhere(data_full['distance'] > signal_threshold)
     print(garbage_where)
     if not garbage_where.size:
@@ -111,9 +167,12 @@ def clean_data(data_full, signal_threshold=2):
     print(end_garbage, end_descent)
     print('len', len(data_clean['force']))
     return data_clean, data_clipped, end_descent
-    
+
 
 def calibrate_data(data_clean, descent_end, pulling_start):
+    """ Calibrates and returns a set of data using the `baseline` and 
+    `find_ditch` functions.
+    """
     based_force_full = baseline(data_clean['distance'], data_clean['force'],
                                 pulling_start)
     based_force_2_full = baseline(data_clean['distance'], data_clean['force_2'],
@@ -121,18 +180,31 @@ def calibrate_data(data_clean, descent_end, pulling_start):
 
     ditch_index = find_ditch(based_force_full[descent_end:pulling_start],
                              based_force_2_full[descent_end:pulling_start]) \
-                             + descent_end
+                    + descent_end
     ditched_distance = data_clean['distance'][ditch_index]
     data_cal = data_clean
     data_cal['force'] = based_force_full
     data_cal['force_2'] = based_force_2_full
     data_cal['distance'] -= ditched_distance
-    print('ditch:',ditch_index,ditched_distance)
+    print('ditch:', ditch_index, ditched_distance)
     return data_cal
 
 
 def autosplit(fname):
-    """a mess"""
+    """ Reads a C-trap exported file, calibrates the data and splits the data
+    up in discrete pulling events. Returns a list of dictionaries, each
+    containing key-value pairs for the entire pull-relaxation curve data,
+    as well as partial data of the pulling and the relaxation parts.
+    Could probably do with some cleaning up.
+
+    # Arguments:
+    - fname: filename of a hdp5/lumicks pylake data file. Must include the
+    following property keys:
+    -- ['Trap position']['1X']
+    -- ['Distance']['Piezo Distance']
+    -- ['Force HF']['Force 1x']
+    -- ['Force HF']['Force 2x']
+    """
     # import data
     d = h5py.File(fname, 'r')
     data_full = {
@@ -141,6 +213,7 @@ def autosplit(fname):
         'force': np.asarray(d['Force HF']['Force 1x']),
         'force_2': np.asarray(d['Force HF']['Force 2x'])
     }
+    # for tracking times (requires 'Force LF' data)
     # toseconds = 1e-9  # from ns
     # duration = (d['Force LF']['Force 1x'][:][-1][0]
     #             - d['Force LF']['Force 1x'][:][0][0]) * toseconds
@@ -160,7 +233,7 @@ def autosplit(fname):
     pullens = [pull[1] - pull[0] for pull in pulls]
     pull_points = int(hmean(pullens))  # mean of datapoints per curve. hmean to be close to mode
 
-    print('ppp:',pull_points)
+    print('ppp:', pull_points)
     print(len(pulls))
 
     correction = pull_points // 20
@@ -217,14 +290,3 @@ def autosplit(fname):
              'sign': signal[start:stop][::kernel_size]}
              #'rest': rest}
     return curves
-
-# print('somethihng')
-# curves = autosplit('/home/kris/proj/.data/tweez/yhsp2.h5')
-# print(curves.keys())
-# with h5py.File('/home/kris/proj/.data/tweez/test.h5', 'w') as f:
-#     for curve_id, curve in curves.items():
-#         grp = f.create_group(curve_id)
-#         grp.attrs.create('rest', data=curve['rest'])
-#         for name in ['pull_force', 'pull_dist', 'rlx_force', 'rlx_dist',
-#                      'full_force', 'full_dist']:
-#             grp.create_dataset(name, data=curve[name])

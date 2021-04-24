@@ -38,7 +38,8 @@ class Curve:
         arbitrary. Returns True if a sudden drop is detected and False
         otherwise.
         
-
+        The `handle_contour` argument governs whether to apply a method 
+        that uses a DNA handle contour estimate.
         """
         if handle_contour:
             start = np.argwhere(self.dist_data > handle_contour)[0][0]
@@ -55,6 +56,7 @@ class Curve:
                     LONGEST=1e6, handle_contour=False):
         """ Identifies relevant events in the force data over time. From those
         events determines which parts (legs) of the data to mark for fitting.
+        These legs (slice objects) are put in a list `self.legs`.
 
         # Arguments:
         - STARTING_FORCE: we do not mark for fitting data before the point
@@ -144,11 +146,14 @@ class Curve:
         the case of two tethers.
         Similarly tries to redescribe the system to better fit the two-tether
         case by halving force data and doubling distance data.
+        Results are stored in the `self.tether_tests` dictionary with keys
+        corresponding to the different tests and values `True` for failed tests
+        or `False` for passed tests.
 
         # Arguments:
-        - model: Pylake model object.
+        - model: Pylake model object of the relevant (DNA handles) model.
         - estimates_dict: dictionary with the raw estimates as well as changed
-        estimates for east test. Raw estimates have to be named 'original'.
+        estimates for each test. Raw estimates have to be named 'original'.
         - VERBOSE: toggle to print out the test results immediately
         """
         fits = {test_id: lk.FdFit(model) for test_id in estimates_dict.keys()}
@@ -187,7 +192,8 @@ class Curve:
                         handle_estimates: dict):
         """ initialize a lk.FdFit object for each unfolding event and perform
         a fit for the DNA handles part of the system. The results of that fit
-        are copied onto all fit objects and fixed.
+        are copied onto all fit objects and fixed. A list of fits is stored
+        in `self.fits`.
 
         # Arguments
         - handles_model: pylake model object describing the DNA handles.
@@ -213,7 +219,8 @@ class Curve:
             load_estimates(fit, extract_estimates(self.fits[0]))
 
     def fit_composites(self, protein_estimates: dict):
-        """ Perform a fit for each remaining leg using the composite model.
+        """ Perform a fit for each remaining (post-unfold) leg using the
+        composite model, fitting only the protein parameters.
 
         # Arguments:
         - protein_estimates: initial estimates given for the composite model.
@@ -253,7 +260,6 @@ class Curve:
         self.fits[0][self.handles_model].plot()
         for fit in self.fits:
             fit[self.composite_model].plot()
-        #plt.yscale('log')
         return fig
 
     def compute_unfold_forces(self, handles_model: lk.fitting.model.Model,
@@ -277,7 +283,7 @@ class Curve:
     def print_result_rows(self, row_format: str):
         """ Print a row containing contour length, persistence length and
         unfolding force for each unfolded domain. Formatted according to
-        the row_format argument.
+        the `row_format` argument.
 
         # Arguments:
         - row_format: python formatting string

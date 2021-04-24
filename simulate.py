@@ -9,7 +9,7 @@ def gen_hm():
     return lk.inverted_odijk('handles') + lk.force_offset('handles')
 def gen_comp():
     comp_wrt_f = lk.odijk('handles') + lk.inverted_marko_siggia_simplified('protein')
-    return comp_wrt_f.invert(interpolate = True, 
+    return comp_wrt_f.invert(interpolate = True,
                              independent_min = 0,
                             independent_max = 90) + lk.force_offset('handles')
 
@@ -64,7 +64,6 @@ def generate_fd(first_unf, cls, handle_estimates_orig, protein_estimates_orig,
     noisy_dists = concdists + np.random.normal(0, stds['dist'], len(concdists))
     noisy_forces = concforces + np.random.normal(0, stds['force'], len(concforces))
     return (noisy_dists, noisy_forces)
-
 
 #gens = generate_fd(0.38, [0.020, 0.025, 0.035])
 

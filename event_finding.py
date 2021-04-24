@@ -5,6 +5,7 @@ from sklearn.linear_model import LinearRegression
 
 
 def moving_window_SLR(f, window_size=100):
+    """unused"""
     models = []
     x = np.arange(window_size).reshape((-1, 1))
     for left in np.asarray(range(len(f) // window_size)) * window_size:
@@ -17,6 +18,7 @@ def moving_window_SLR(f, window_size=100):
 
 
 def top_finder(f, window_size=100):
+    """no longer used"""
     models = moving_window_SLR(f, window_size=window_size)
     slopes = np.asarray([model['slope'] for model in models])
     ignore_from = (len(slopes) // 5) * 4
@@ -45,6 +47,7 @@ def get_first_trough_index(f, last=False, debug=False):
     """ Tries to find stationary/return point of trace including pulling and 
     relaxation. Looks at standard deviation of a running mean and signals at
     abrupt drops.
+    No longer used.
     """
     stds = []
     for i in range(25, len(f) - 25):
@@ -72,8 +75,16 @@ def get_first_trough_index(f, last=False, debug=False):
 
 def find_transitions(y: np.ndarray, noise_estimation_window: tuple = None):
     """ Tries to find unfolding events by looking for negative outliers in
-    force change that exceed by a factor of background noise.
+    force change that exceed by a factor of background noise. Returns an array
+    of indices which denote transition events and the threshold used for
+    identifying them.
+
     Thanks goes out to Christopher Battle for providing the original code.
+    
+    # Arguments
+    - y: array of timeseries data
+    - noise_estimation_window: location in the data that is sampled as an
+    estimate of noise. defaults to using datapoints at the start of `y`
     """
     EPS = 1e-4  # SNR stabilization factor
 

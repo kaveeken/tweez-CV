@@ -136,3 +136,19 @@ def plot_events(fdcurves):
         plt.plot(np.arange(top[0], top[1]), fdata[top[0]:top[1]], c='tab:red')
 
         i += 1
+
+def spline_residals(y, k=3, s=1000):
+    """ Exaggerate unfolding events in data `y` by subtracting a polynomial
+    spline fit (`scipy.interpolate.UnivariateSpline`), returning the residuals.
+    
+    # Arguments:
+    - y: array of timeseries data
+    - k: degree of polynomial. defaults to 3, i.e. cubic
+    - s: smoothing factor.
+    """
+    from scipy.interpolate import UnivariateSpline
+    x = np.arange(len(y))
+    spline = UnivariateSpline(x,y,k=k,s=s)
+
+    return y - spline(x)
+

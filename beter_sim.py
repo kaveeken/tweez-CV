@@ -12,6 +12,27 @@ _comp = _comp_f.invert(interpolate=True,
                        independent_min=0,
                        independent_max=90)
 
+handle_estimates = \
+    {'handles/Lp':  # DNA handle persistence length (nm)
+      {'value': 15,  # initial estimate
+       'upper_bound': 100,  # very wide bounds?
+       'lower_bound': 0.0},
+     'handles/Lc':  # contour length (um)
+      {'value': 0.3},#bp2cl(1040)},  # bp2cl generates a contour length from a number of basepairs.
+     'handles/St':  # stretch modulus (pN)
+      {'value': 300,
+       'lower_bound': 250}
+  }
+protein_estimates = \
+     {'protein/Lp':  # unfolded protein persistence length (nm)
+      {'value': 0.7,
+      'upper_bound': 1.0,
+      'lower_bound': 0.6,
+      'fixed': False},
+     'protein/Lc':  # contour length (um)
+      {'value': 0.001,
+       'fixed': False}
+     }
 
 def compute_unfold_distances(ufs, cls, handle_estimates,
                              protein_estimates):
@@ -65,7 +86,10 @@ def simulate_force(d_legs, cls, handle_estimates, protein_estimates):
         cl_total += cl
         fit['protein/Lc'].value = cl_total
         f_legs.append(_comp(d_leg, fit))
-    return (np.concatenate(d_legs), np.concatenate(f_legs))
+    unfold_points = [len(d_legs[0])]
+    for leg in d_legs[1:]:
+        unfold_points.append(unfold_points[-1] + len(leg))
+    return ((np.concatenate(d_legs), np.concatenate(f_legs)), unfold_points)
 
 
 def full_sim(ufs, cls, handle_estimates, protein_estimates):

@@ -137,7 +137,7 @@ def plot_events(fdcurves):
 
         i += 1
 
-def spline_residals(y, k=3, s=1000):
+def spline_residuals(y, k=3, s=1000):
     """ Exaggerate unfolding events in data `y` by subtracting a polynomial
     spline fit (`scipy.interpolate.UnivariateSpline`), returning the residuals.
     

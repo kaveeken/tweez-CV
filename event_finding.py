@@ -80,7 +80,7 @@ def find_transitions(y: np.ndarray, noise_estimation_window: tuple = None):
     identifying them.
 
     Thanks goes out to Christopher Battle for providing the original code.
-    
+   
     # Arguments
     - y: array of timeseries data
     - noise_estimation_window: location in the data that is sampled as an
@@ -122,7 +122,7 @@ def find_transitions(y: np.ndarray, noise_estimation_window: tuple = None):
 
 
 def plot_events(fdcurves):
-    """ Constructs a plot for each member of fdcurves which highlights events of
+    """ Constructs a plot for each member of `fdcurves` which highlights events of
     interest and targets for fitting.
     """
     plt.figure(figsize=(8, 24))

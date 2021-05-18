@@ -89,7 +89,7 @@ def simulate_force(d_legs, cls, handle_estimates, protein_estimates):
     unfold_points = [len(d_legs[0])]
     for leg in d_legs[1:]:
         unfold_points.append(unfold_points[-1] + len(leg))
-    return ((np.concatenate(d_legs), np.concatenate(f_legs)), unfold_points)
+    return ((np.concatenate(d_legs), np.concatenate(f_legs)), unfold_points[:-1])
 
 
 def full_sim(ufs, cls, handle_estimates, protein_estimates):

@@ -1,75 +1,121 @@
 import numpy as np
 import lumicks.pylake as lk
-from matplotlib import pyplot as plt
-from copy import deepcopy
 
 from util import load_estimates
 
-def gen_hm():
-    return lk.inverted_odijk('handles') + lk.force_offset('handles')
-def gen_comp():
-    comp_wrt_f = lk.odijk('handles') + lk.inverted_marko_siggia_simplified('protein')
-    return comp_wrt_f.invert(interpolate = True,
-                             independent_min = 0,
-                            independent_max = 90) + lk.force_offset('handles')
+_hm_f = lk.odijk('handles')
+_comp_f = lk.odijk('handles') \
+    + lk.inverted_marko_siggia_simplified('protein')
 
-# change! proper distance data (jumps @ unfold), specify unfold forces instead of first unfold dsit
-def generate_fd(first_unf, cls, handle_estimates_orig, protein_estimates_orig,
-                stds={'dist': 0.00195, 'force': 0.105}):
-    model_h = gen_hm()
-    model_c = gen_comp()
-    fit = lk.FdFit(model_h, model_c)
-    junk = (np.linspace(0.28,0.3,100), np.linspace(0,20,100))
-    fit[model_h].add_data('junk', *junk)
-    fit[model_c].add_data('junk', *junk)
+_hm = lk.inverted_odijk('handles')
+_comp = _comp_f.invert(interpolate=True,
+                       independent_min=0,
+                       independent_max=90)
 
-    handle_estimates = deepcopy(handle_estimates_orig)
-    protein_estimates = deepcopy(protein_estimates_orig)
-    for param in handle_estimates.values():
-        param['fixed'] = True
-    for param in protein_estimates.values():
-        param['fixed'] = True
-    load_estimates(fit, handle_estimates)
-    load_estimates(fit, protein_estimates)
-    fit['protein/Lc'].value = cls[0]
+handle_estimates = \
+    {'handles/Lp':  # DNA handle persistence length (nm)
+      {'value': 15,  # initial estimate
+       'upper_bound': 100,  # very wide bounds?
+       'lower_bound': 0.0},
+     'handles/Lc':  # contour length (um)
+      {'value': 0.3},#bp2cl(1040)},  # bp2cl generates a contour length from a number of basepairs.
+     'handles/St':  # stretch modulus (pN)
+      {'value': 300,
+       'lower_bound': 250}
+  }
+protein_estimates = \
+     {'protein/Lp':  # unfolded protein persistence length (nm)
+      {'value': 0.7,
+      'upper_bound': 1.0,
+      'lower_bound': 0.6,
+      'fixed': False},
+     'protein/Lc':  # contour length (um)
+      {'value': 0.001,
+       'fixed': False}
+     }
 
-    unfold_dist = first_unf
-    stop_dist = unfold_dist + sum(cls)
-    pull_dists = np.linspace(0.28, stop_dist, 2000)
-    distances = [pull_dists[pull_dists < unfold_dist]]
-    forces = [model_h(distances[0], fit)]
-    total_cl = 0
+def compute_unfold_distances(ufs, cls, handle_estimates,
+                             protein_estimates):
+    fits = [lk.FdFit(_hm_f),
+            *[lk.FdFit(_hm_f, _comp_f) for uf in ufs]]
+    fits[0][_hm_f].add_data('junk', [0], [0])
+    load_estimates(fits[0], handle_estimates)
+    low_force = _hm_f(5, fits[0])
+    uds = [_hm_f(ufs[0], fits[0])]
+
+    cl_total = 0
+    for fit, cl, uf in zip(fits[1:], cls[:-1], ufs[1:]):
+        fit[_comp_f].add_data('junk', [0], [0])
+        cl_total += cl
+        load_estimates(fit, handle_estimates)
+        load_estimates(fit, protein_estimates)
+        fit['protein/Lc'].value = cl_total
+        uds.append(_comp_f(uf, fit))
+    return (low_force, uds)
+
+
+def simulate_distance(low, uds, cls, length=2000):
+    if len(uds) == 1:
+        top = uds[0] + uds[0] / 10
+    else:
+        top = uds[-1] + max(np.diff(uds))
+    graph = [low, *uds, top]
     for index, cl in enumerate(cls):
-        newdist = pull_dists[pull_dists >= unfold_dist]
-        # print(len(newdist))
-        unfold_dist += cl
-        # print(index, cl, len(cls))
-        if index < len(cls) - 1:
-            newdist = newdist[newdist < unfold_dist]
-        distances.append(newdist)
-        total_cl += cl
-        fit['protein/Lc'].value = total_cl
-        newforce = model_c(newdist, fit)
-        forces.append(newforce)
-    stat_dists = np.zeros(500) + stop_dist
-    stat_forces = np.zeros(500) + model_c(stop_dist, fit)
-    distances.append(stat_dists)
-    forces.append(stat_forces)
-    relax_dists = np.linspace(stop_dist, 0.28, 2000) 
-    relax_forces = model_c(relax_dists, fit)
-    distances.append(relax_dists)
-    forces.append(relax_forces)
-    concdists = np.concatenate(distances, axis=None)
-    concforces = np.concatenate(forces, axis=None)
-    noisy_dists = concdists + np.random.normal(0, stds['dist'], len(concdists))
-    noisy_forces = concforces + np.random.normal(0, stds['force'], len(concforces))
-    return (noisy_dists, noisy_forces)
+        location = (index + 1) * 2
+        value = graph[location - 1] + cl / 2
+        graph.insert(location, value)
+    steps = np.diff(graph)
+    total = sum(steps)
+    legs = []
+    for index, node in enumerate(graph):
+        if index % 2:
+            weight = (node - graph[index - 1]) / total
+            leg_len = int(weight * length)
+            legs.append(np.linspace(graph[index - 1], node, leg_len))
+    return legs
 
-#gens = generate_fd(0.38, [0.020, 0.025, 0.035])
 
-# plt.figure(figsize=(8,14))
-# plt.subplot(2, 1, 1)
-# plt.plot(*gens, '.', c='tab:blue')
-# plt.subplot(2, 1, 2)
-# plt.plot(gens[1], '.', c='tab:blue')
-# plt.savefig('sim_test.png')
+def simulate_force(d_legs, cls, handle_estimates, protein_estimates):
+    fit = lk.FdFit(_hm)
+    fit[_hm].add_data('junk', [0], [0])
+    load_estimates(fit, handle_estimates)
+    f_legs = [_hm(d_legs[0], fit)]
+    cl_total = 0
+    for d_leg, cl in zip(d_legs[1:], cls):
+        fit = lk.FdFit(_hm, _comp)
+        fit[_comp].add_data('junk', [0], [0])
+        load_estimates(fit, handle_estimates)
+        load_estimates(fit, protein_estimates)
+        cl_total += cl
+        fit['protein/Lc'].value = cl_total
+        f_legs.append(_comp(d_leg, fit))
+    unfold_points = [len(d_legs[0])]
+    for leg in d_legs[1:]:
+        unfold_points.append(unfold_points[-1] + len(leg))
+    return ((np.concatenate(d_legs), np.concatenate(f_legs)), unfold_points[:-1])
+
+
+def full_sim(ufs, cls, handle_estimates, protein_estimates):
+    (low, uds) = compute_unfold_distances(ufs, cls, handle_estimates,
+                                          protein_estimates)
+    d_legs = simulate_distance(low, uds, cls)
+    return simulate_force(d_legs, cls, handle_estimates, protein_estimates)
+
+
+if __name__ == '__main__':
+    from matplotlib import pyplot as plt
+    from ests import handle_estimates, protein_estimates
+    ufs = [30, 40, 50]
+    cls = [0.01, 0.015, 0.01]
+    dists = compute_unfold_distances(ufs, cls,
+                                     handle_estimates, protein_estimates)
+    print(dists)
+    d_legs = simulate_distance(*dists, cls)
+    (d, f) = simulate_force(d_legs, cls, handle_estimates, protein_estimates)
+    fig, ax1 = plt.subplots()
+    ax1.plot(f)
+    for uf in ufs:
+        ax1.axhline(uf)
+    ax2 = ax1.twinx()
+    ax2.plot(d, c='tab:orange')
+    plt.show()

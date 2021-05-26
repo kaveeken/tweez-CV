@@ -19,15 +19,15 @@ def find_pulls(signal, bins=100, stepsize=1000, verbose=False):
     # find the tops and bottoms of pulling curves by binning our signal data
     # this approach may not work with data that includes differently shaped pulls
     # we assume that the peaks and throughs of pulls are consistent and are the most visited states
-    bars = plt.hist(signal[::stepsize], bins=bins)  # doesn't nupy have a binning fn?
-    highest = np.argmax(bars[0])
-    second = np.argmax([heigth for index, heigth in enumerate(bars[0])
+    #bars = plt.hist(signal[::stepsize], bins=bins)  # doesn't nupy have a binning fn?
+    hist, edges = np.histogram(signal[::stepsize], bins=bins)
+    highest = np.argmax(hist)
+    second = np.argmax([heigth for index, heigth in enumerate(hist)
                         if index != highest])
 
-    low_signal = bars[1][min(highest, second) + 1]
-    high_signal = bars[1][max(highest, second)]
+    low_signal = edges[min(highest, second) + 1]
+    high_signal = edges[max(highest, second)]
 
-    print(bars[1])
     pulling = True
     relaxing = True
     pulls = []
@@ -219,11 +219,6 @@ def autosplit(fname):
     #             - d['Force LF']['Force 1x'][:][0][0]) * toseconds
     # frequency = len(data_full['force']) / duration
     d.close()
-
-    plt.figure()
-    plt.plot(data_full['signal'])
-    plt.plot(data_full['distance'])
-    plt.figure()
 
     # clean up data
     data_clean, data_clipped, end_descent = clean_data(data_full)

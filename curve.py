@@ -4,6 +4,7 @@ from math import exp
 from matplotlib import pyplot as plt
 
 from event_finding import get_first_trough_index, find_transitions, top_finder
+from event_finding import spline_residuals
 from util import extract_estimates, load_estimates
 
 
@@ -53,7 +54,7 @@ class Curve:
 
     def find_events(self, STARTING_FORCE: float = 0, CORDON: int = 10,
                     FIT_ON_RETURN: tuple = (), DEBUG: bool = False,
-                    LONGEST=1e6, handle_contour=False):
+                    LONGEST=1e6, handle_contour=False, splines=True):
         """ Identifies relevant events in the force data over time. From those
         events determines which parts (legs) of the data to mark for fitting.
         These legs (slice objects) are put in a list `self.legs`.
@@ -111,8 +112,13 @@ class Curve:
             else:
                 self.start = np.argwhere(self.pull_f > STARTING_FORCE)[0][0]
             # pull_f should be turned into pull_f[start:]?
-            self.unfolds, self.threshold = \
-                find_transitions(self.pull_f[self.start:])
+            residuals = spline_residuals(self.pull_f[self.start:])
+            if splines:
+                self.unfolds, self.threshold = \
+                    find_transitions(residuals)
+            else:
+                self.unfolds, self.threshold = \
+                    find_transitions(self.pull_f[self.start:])
             self.unfolds = np.asarray([unfold + self.start for unfold in self.unfolds])
             events = [self.start, *self.unfolds, len(self.pull_f)]
             self.legs = [slice(*[events[i] + CORDON,

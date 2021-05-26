@@ -5,7 +5,6 @@ from sklearn.linear_model import LinearRegression
 
 
 def moving_window_SLR(f, window_size=100):
-    """unused"""
     models = []
     x = np.arange(window_size).reshape((-1, 1))
     for left in np.asarray(range(len(f) // window_size)) * window_size:
@@ -18,7 +17,6 @@ def moving_window_SLR(f, window_size=100):
 
 
 def top_finder(f, window_size=100):
-    """no longer used"""
     models = moving_window_SLR(f, window_size=window_size)
     slopes = np.asarray([model['slope'] for model in models])
     ignore_from = (len(slopes) // 5) * 4
@@ -47,7 +45,6 @@ def get_first_trough_index(f, last=False, debug=False):
     """ Tries to find stationary/return point of trace including pulling and 
     relaxation. Looks at standard deviation of a running mean and signals at
     abrupt drops.
-    No longer used.
     """
     stds = []
     for i in range(25, len(f) - 25):
@@ -75,16 +72,8 @@ def get_first_trough_index(f, last=False, debug=False):
 
 def find_transitions(y: np.ndarray, noise_estimation_window: tuple = None):
     """ Tries to find unfolding events by looking for negative outliers in
-    force change that exceed by a factor of background noise. Returns an array
-    of indices which denote transition events and the threshold used for
-    identifying them.
-
+    force change that exceed by a factor of background noise.
     Thanks goes out to Christopher Battle for providing the original code.
-   
-    # Arguments
-    - y: array of timeseries data
-    - noise_estimation_window: location in the data that is sampled as an
-    estimate of noise. defaults to using datapoints at the start of `y`
     """
     EPS = 1e-4  # SNR stabilization factor
 
@@ -122,7 +111,7 @@ def find_transitions(y: np.ndarray, noise_estimation_window: tuple = None):
 
 
 def plot_events(fdcurves):
-    """ Constructs a plot for each member of `fdcurves` which highlights events of
+    """ Constructs a plot for each member of fdcurves which highlights events of
     interest and targets for fitting.
     """
     plt.figure(figsize=(8, 24))
@@ -147,3 +136,19 @@ def plot_events(fdcurves):
         plt.plot(np.arange(top[0], top[1]), fdata[top[0]:top[1]], c='tab:red')
 
         i += 1
+
+def spline_residuals(y, k=3, s=1000):
+    """ Exaggerate unfolding events in data `y` by subtracting a polynomial
+    spline fit (`scipy.interpolate.UnivariateSpline`), returning the residuals.
+    
+    # Arguments:
+    - y: array of timeseries data
+    - k: degree of polynomial. defaults to 3, i.e. cubic
+    - s: smoothing factor.
+    """
+    from scipy.interpolate import UnivariateSpline
+    x = np.arange(len(y))
+    spline = UnivariateSpline(x,y,k=k,s=s)
+
+    return y - spline(x)
+

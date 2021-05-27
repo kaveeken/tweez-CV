@@ -25,7 +25,7 @@ class Curve:
         self.force_data = fdata
 
         self.split = 0
-        if pull_f.any() and pull_d.any():
+        if pull_f.size > 2 and pull_d.size > 2:
             self.split += 1
             self.pull_f = pull_f
             self.pull_d = pull_d
@@ -73,19 +73,19 @@ class Curve:
         """
         if DEBUG:
             print(self.identifier)
-        # self.top = (top_finder(self.force_data, window_size=100),
-        #             len(self.force_data) - top_finder(self.force_data[::-1],
-        #                                               window_size=100))
+            print(self.split)
         if not self.split:  # old part
             self.top = (get_first_trough_index(self.force_data, debug=DEBUG),
                         get_first_trough_index(self.force_data, last=True,
                                                debug=DEBUG))
+            self.pull_d = self.dist_data[:self.top[0]]
+            self.pull_f = self.dforce_data[:self.top[0]]
             if self.top[1] - self.top[0] > 100 and False:
                 self.unfolds, self.threshold = \
                     find_transitions(self.force_data,
                                      noise_estimation_window=self.top)
             else:
-                self.unfolds, self.threshold = find_transitions(self.force_data)
+                self.unfolds, self.threshold = find_transitions(self.pull_f)
 
                 self.start = 0
                 for index, force in enumerate(self.force_data):
